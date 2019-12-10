@@ -1,13 +1,7 @@
 import argparse
-import pickle
 from math import log
 
 from openpyxl import load_workbook, Workbook
-
-import pandas as pd
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.model_selection import train_test_split
-from sklearn import metrics
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--xlsx', help='need a xlsx file. \
@@ -16,7 +10,7 @@ args = parser.parse_args()
 
 
 
-def loadData(file):
+def load_data(file):
     wb = load_workbook(file)
     ws = wb.active
 
@@ -62,7 +56,7 @@ def impurity(groups, classes, mode='gini'):
                 if p != 0:
                     score_e -= p*log(p,2)
             elif mode == 'gain_ratio':
-                parent[class_val] += [row[-1] for row in group].count(class_val)
+                parent[class_val-1] += [row[-1] for row in group].count(class_val)
 
         if mode == 'gini':
             gini += (size/n_instance) * (1 - score)
@@ -86,11 +80,13 @@ def impurity(groups, classes, mode='gini'):
     
         if splitInfo != 0:
             gainRatio = info_gain/splitInfo
+        else:
+            gainRatio = info_gain
         
         return gainRatio
 
 
-def continuous_attribute_split_position(featList):
+def _continuous_attribute_split_position(featList):
     """
     input 7 values, output 8 values
      1 2 3 4 5 6 7
@@ -109,196 +105,89 @@ def continuous_attribute_split_position(featList):
 def test_split(dataset, index, value):     
     left = []
     right = []                                     
-    for row in dataSet:
+    for row in dataset:
         if row[index] < value:
             left.append(row)
         elif row[index] >= value:
             right.append(row)
     return left, right
 
-def Dataset_class(dataSet):
-    totalNum = len(dataSet)
-    labelNum = {}
-    for data in dataSet:
-        class_ = data[1]
-        if class_ in labelNum:
-            labelNum[class_] += 1
-        else:
-            labelNum[class_] = 1
+def get_best_feature_to_split(dataset, mode):
+    class_values = list(set(row[-1] for row in dataset))
 
-def get_best_feature_to_split(dataSet):
-    numFeatures = len(dataSet[0]) - 2                  #特征数量
-    parentImpurity = cal_2class_impurity(dataSet)
-    print('feature number: ',numFeatures) 
-    print('parentImpurtiy: ', parentImpurity)
-    
+    b_f_index, b_value, b_score, groups = None, None, None, None
+    if mode == 'gini' or mode == 'entropy': b_score = 10000
+    elif mode == 'gain_ratio': b_score = -1
 
-    bestInfoGain = 0.0                                #信息增益
-    bestFeature = -1
-    bestSplitValue = 0.0                                    #最优特征的索引值
-    for i in range(2, numFeatures):                        #遍历所有特征
-        #获取dataSet的第i个所有特征
-        featList = [example[i] for example in dataSet]
-        splitPositions = continuousAttribute(featList)                    
-        newImpurity = 100000.0
-        newSplitValue = 0.0                 
-        for value in splitPositions:     
-            subL, subR = splitDataSet(dataSet, i, value)      #subDataSet划分后的子集
-
-            probL = len(subL) / float(len(dataSet))        #计算子集的概率
-            probR = len(subR) / float(len(dataSet))
-            giniSplit = probL * cal_2class_impurity(subL) \
-                      + probR * cal_2class_impurity(subR)
-
-            #print(value, ' : ', len(subL), ' ', len(subR), ', giniSplit: ', giniSplit)
-            if giniSplit < newImpurity:
-                newImpurity = giniSplit
-                newSplitValue = value
+    for f_index in range(len(dataset[0])-1):
         
+        column_value = [example[f_index] for example in dataset]
+        split_values = _continuous_attribute_split_position(column_value)
 
-        infoGain = parentImpurity - newImpurity                     #信息增益
-        #print("第%d个特征的增益为%.3f, gini split值為%.3f, 最低gini的split position為%f" % (i-2, infoGain, newEntropy, newSplitValue))           #打印每个特征的信息增益
-        if (infoGain > bestInfoGain):                           #计算信息增益
-            bestInfoGain = infoGain                             #更新信息增益，找到最大的信息增益
-            bestFeature = i-2
-            bestSplitValue = newSplitValue
+        
+        for value in split_values:
+            groups = test_split(dataset, f_index, value)
+            score = impurity(groups, class_values, mode)
+            if mode == 'gini' or mode == 'entropy':
+                if score < b_score:
+                    b_f_index, b_value, b_score, b_groups = f_index, value, score, groups
+            if mode == 'gain_ratio':
+                if score > b_score:
+                    b_f_index, b_value, b_score, b_groups = f_index, value, score, groups
+            #print('feature %d < %f score = %.3f / best: feature %d < %f score = %.3f' % \
+            #    (f_index, value, score, b_f_index, b_value, b_score))
+    print('best: feature %d < %f, score = %f, {left: %d, right: %d}' % \
+                (b_f_index, b_value, b_score, len(b_groups[0]), len(b_groups[1])))
+    return {'feature_index':b_f_index, 'split_value':format(b_value, '.8f'), 'groups':b_groups}
 
+def set_class_value_to_terminal(group, class_values):
+    outcomes = [row[-1] for row in group]
+    return {'class': max(set(outcomes), key=outcomes.count),
+            'c1': outcomes.count(class_values[0]),
+            'c2': outcomes.count(class_values[1])}
 
-    #print("最終：第%d个特征的增益为%.3f, 最低gini的split position為%f" % (bestFeature, bestInfoGain, bestSplitValue))  
-    return bestFeature, bestSplitValue
+def per_class_number(group, class_values):
+    outcomes = [row[-1] for row in group]
+    return {'c1': outcomes.count(class_values[0]),
+            'c2': outcomes.count(class_values[1])}
 
-
-
-
-
-def majorityCnt(classList):
-    classCount = {}
-    for vote in classList:  #统计classList中每个元素出现的次数
-        if vote not in classCount.keys():classCount[vote] = 0   
-        classCount[vote] += 1
-    sortedClassCount = sorted(classCount.items(), key = operator.itemgetter(1), reverse = True)     #根据字典的值降序排序
-    return sortedClassCount[0][0]   #返回classList中出现次数最多的元素
-
-def createTree(dataSet, labels, featLabels):
-    classList = None
-    try:
-        classList = [example[1] for example in dataSet]
-        if classList.count(classList[0]) == len(classList):         #如果类别完全相同则停止继续划分
-            return classList[0]
-        if len(dataSet[0]) == 1:                                    #遍历完所有特征时返回出现次数最多的类标签
-            return majorityCnt(classList)
-    except:
-        print('classfication done.')
+def split(node, class_values, max_depth=3, min_size=1, depth=1, mode='gini'):
+    
+    left, right = node['groups']
+    del(node['groups'])
+    node['data分佈'] = per_class_number(left+right, class_values)
+    if not left:
+        node['right'] = set_class_value_to_terminal(right, class_values)
         return
+    elif not right:
+        node['left'] = set_class_value_to_terminal(left, class_values)
+        return
+
+    if depth >= max_depth:
+        node['left'], node['right'] = set_class_value_to_terminal(left, class_values), set_class_value_to_terminal(right, class_values)
+        return
+    if len(left) <= min_size:
+        node['left'] = set_class_value_to_terminal(left, class_values)
+    else:
+        node['left'] = get_best_feature_to_split(left, mode)
+        split(node['left'], class_values, max_depth, min_size, depth+1, mode)
+
+    if len(right) <= min_size:
+        node['right'] = set_class_value_to_terminal(right, class_values)
+    else:
+        node['right'] = get_best_feature_to_split(right, mode)
+        split(node['right'], class_values, max_depth, min_size, depth+1, mode) 
+
+def main():
+    dataset, labels,  = load_data(args.XLSX)
+
+    class_values = list(set(row[-1] for row in dataset))
     
-    bestFeat, bestSplitValue = chooseBestFeatureToSplit(dataSet)
-     
-    print('best:', bestFeat) 
-    print(labels)                #选择最优特征
-    bestFeatLabel = labels[bestFeat]
-    
-    #print(bestSplitValue)                           #最优特征的标签
-    featLabels.append(bestFeatLabel)
-    bestFeatLabel +=  ' ' + str(bestSplitValue)
-    myTree = {bestFeatLabel:{}}                                 #根据最优特征的标签生成树
-    del(labels[bestFeat])
-    print(myTree)
-                                          
-    #featValues = [example[bestFeat] for example in dataSet]     #得到训练集中所有最优特征的属性值
-    #uniqueVals = set(featValues)                                #去掉重复的属性值
-    subL, subR = splitDataSet(dataSet, bestFeat+2, bestSplitValue)
-    left = '<= ' + str(bestSplitValue)
-    right = '> ' + str(bestSplitValue)
-    #print(len(subL))
-    labelNum = cal_2class_impurity(subL, 'classCount')
-    print(left, 'left',labelNum)
-    #print(len(subR))
-    labelNum = cal_2class_impurity(subR, 'classCount')
-    print(right, 'right',labelNum)
-    
-    #print(len(dataSet))
-    #print(len(subL))
-    #print(len(subR))
-    print('\n')
-    if len(labels) > 0:                   
-        myTree[bestFeatLabel]['left'] = createTree(subL, labels, featLabels)
-        
-        
-    if len(labels) > 0:
-        myTree[bestFeatLabel]['right'] = createTree(subR, labels, featLabels)
-        
-    
-    
-    return myTree
+    root = get_best_feature_to_split(dataset, 'gain_ratio')
 
-#------------------
+    split(root, class_values, max_depth=3, min_size=5, depth=1, mode='gain_ratio')
+
+    print(root)
 
 
-
-#dataSet, labels, F_Name = loadData2(args.XLSX)
-dataSet, labels,  = loadData(args.XLSX)
-
-dataset = [[2.771244718,1.784783929,0],
-    [1.728571309,1.169761413,0],
-    [3.678319846,2.81281357,0],
-    [3.961043357,2.61995032,0],
-    [2.999208922,2.209014212,0],
-    [7.497545867,3.162953546,1],
-    [9.00220326,3.339047188,1],
-    [7.444542326,0.476683375,1],
-    [10.12493903,3.234550982,1],
-    [6.642287351,3.319983761,1]]
-
-#BASE = None
-#if mode == 'gini' or 'entropy'
-#BASE = 10000
-#if mode == 'gain_ratio'
-#BASE = 0
-#classes = [0, 1]
-
-#value = impurity(dataset, [0,1], mode='gain_ratio')
-dataset = dataSet
-
-class_values = list(set(row[-1] for row in dataset))
-
-b_f_index, b_value, b_score, groups = None, None, 10000, None
-for f_index in range(len(dataset[0])-1):
-    
-    column_value = [example[f_index] for example in dataset]
-    split_values = continuous_attribute_split_position(column_value)
-
-    
-    for value in split_values:
-        groups = test_split(dataset, f_index, value)
-        score = impurity(groups, class_values, 'gini')
-        #if mode == 'gini' or 'entropy':
-        if score < b_score:
-            b_f_index, b_value, b_score, b_groups = f_index, value, score, groups
-        #if mode == 'gain_ratio':
-        #if split_impurity > b_split_impurity:
-        #    b_split_impurity = split_impurity
-        print('feature %d < %f score = %.3f / best: feature %d < %f score = %.3f' % \
-            (f_index, value, score, b_f_index, b_value, b_score))
-
-
-#featLabels = []
-#myTree = createTree(dataSet, labels, featLabels)
-
-#print(myTree)
-
-
-dataset = [[[2.771244718,1.784783929,0],
-    [1.728571309,1.169761413,0],
-    [3.678319846,2.81281357,0],
-    [3.961043357,2.61995032,0],
-    [2.999208922,2.209014212,0],
-    [7.497545867,3.162953546,1],
-    [9.00220326,3.339047188,1],
-    [7.444542326,0.476683375,1],
-    [10.12493903,3.234550982,1],
-    [6.642287351,3.319983761,1]]]
-
-
-
-
-
+main()

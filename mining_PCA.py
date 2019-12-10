@@ -77,7 +77,8 @@ def choose_k_largest_eigen_transform(Attributes, vectors, mean_vector, k):
     
     z = np.dot(Attributes, W)
     print('the results of dimension reduction')
-    print(z)
+    for el in z:
+        print(el, end=', ')
 
     arr = np.array(z)
     n1 = arr.shape[0]
@@ -88,8 +89,9 @@ def choose_k_largest_eigen_transform(Attributes, vectors, mean_vector, k):
     fig = pyplot.figure()
     pyplot.xlabel('First Eigenvetor')
     pyplot.ylabel('Second Eigenvetor')
-    pyplot.scatter(xcord1[:78], ycord1[:78], c='red', marker='o')
-    pyplot.scatter(xcord1[78:], ycord1[78:], c='blue', marker='o')
+    pyplot.scatter(xcord1[:78], ycord1[:78], c='red', marker='o', label='class 1')
+    pyplot.scatter(xcord1[78:], ycord1[78:], c='blue', marker='o', label='class 2')
+    pyplot.legend(loc='upper left')
     pyplot.savefig('pca.png',dpi=400)
     pyplot.show()
     
@@ -119,6 +121,10 @@ Features = loadData(args.XLSX)
 mean_vector, e_values, e_vectors, norm_Features = calculate_eigen_of_cov_mat(Features)
 scree_graph(e_values)
 k = 2
+print('eigen value 1:', e_values[0])
+print('eigen vector 1:\n', e_vectors[0])
+print('eigen value 2:', e_values[1])
+print('eigen vector 2:\n', e_vectors[1])
 choose_k_largest_eigen_transform(norm_Features, e_vectors, mean_vector, k)
 
 
