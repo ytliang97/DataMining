@@ -39,31 +39,58 @@ def loadData(file):
     
     return dataSet, labels
 
-def cal_2class_impurity(dataSet, mode='gini'):
-    totalNum = len(dataSet)
-    labelNum = {}
-    for data in dataSet:
-        class_ = data[1]
-        if class_ in labelNum:
-            labelNum[class_] += 1
-        else:
-            labelNum[class_] = 1
-    if mode == 'classCount':
-        return labelNum
-    if mode == 'gini':
-        gini = 0
-        for key in labelNum:
-            p = labelNum[key] / totalNum
-            gini += p * (1-p)
-        return gini
-    elif mode == 'entropy':
-        ent = 0.0
-        for key in labelNum:
-            prob = float(labelNum[key]) /  totalNum
-            ent -= prob * log(prob, 2)
-        return ent
+def impurity(groups, classes, mode='gini'):
+    n_instance = float(sum([len(group) for group in groups]))
 
-def continuousAttribute(featList):
+    gini = 0
+    parent = [0] * len(classes)
+    entropy = 0
+    gainRatio = 0
+    splitInfo = 0
+    
+    for group in groups:
+        size = float(len(group))
+        if size == 0: continue
+        score = 0
+        score_e = 0
+        for class_val in classes:
+            p = [row[-1] for row in group].count(class_val) / size
+            
+            if mode == 'gini':
+                score += p*p
+            elif mode == 'entropy':
+                if p != 0:
+                    score_e -= p*log(p,2)
+            elif mode == 'gain_ratio':
+                parent[class_val] += [row[-1] for row in group].count(class_val)
+
+        if mode == 'gini':
+            gini += (size/n_instance) * (1 - score)
+        elif mode == 'entropy':
+            entropy += (size/n_instance) * score_e
+        elif mode == 'gain_ratio':
+            p = size/n_instance
+            if p != 0:
+                splitInfo -= p*log(p,2)
+    if mode == 'gini':
+        return gini
+    if mode == 'entropy':
+        return entropy
+    if mode == 'gain_ratio':
+        entropy_p = 0
+        for pt in parent:
+            p = pt/n_instance
+            if p != 0:
+                entropy_p -= p*log(p,2)
+        info_gain = entropy_p - entropy
+    
+        if splitInfo != 0:
+            gainRatio = info_gain/splitInfo
+        
+        return gainRatio
+
+
+def continuous_attribute_split_position(featList):
     """
     input 7 values, output 8 values
      1 2 3 4 5 6 7
@@ -79,17 +106,15 @@ def continuousAttribute(featList):
     return s
 #------------------
 
-def splitDataSet(dataSet, index, value):     
-    subL = []
-    subR = []                                     #创建返回的数据集列表
-    for featVec in dataSet:                             #遍历数据集
-        reducedFeatVec = featVec[:index]             #去掉axis特征
-        reducedFeatVec.extend(featVec[index+1:])
-        if featVec[index] <= value:
-            subL.append(reducedFeatVec)
-        elif featVec[index] > value:
-            subR.append(reducedFeatVec)
-    return subL, subR
+def test_split(dataset, index, value):     
+    left = []
+    right = []                                     
+    for row in dataSet:
+        if row[index] < value:
+            left.append(row)
+        elif row[index] >= value:
+            right.append(row)
+    return left, right
 
 def Dataset_class(dataSet):
     totalNum = len(dataSet)
@@ -101,7 +126,7 @@ def Dataset_class(dataSet):
         else:
             labelNum[class_] = 1
 
-def chooseBestFeatureToSplit(dataSet):
+def get_best_feature_to_split(dataSet):
     numFeatures = len(dataSet[0]) - 2                  #特征数量
     parentImpurity = cal_2class_impurity(dataSet)
     print('feature number: ',numFeatures) 
@@ -211,10 +236,49 @@ def createTree(dataSet, labels, featLabels):
 
 
 #dataSet, labels, F_Name = loadData2(args.XLSX)
-dataSet, labels = loadData(args.XLSX)
+dataSet, labels,  = loadData(args.XLSX)
 
+dataset = [[2.771244718,1.784783929,0],
+    [1.728571309,1.169761413,0],
+    [3.678319846,2.81281357,0],
+    [3.961043357,2.61995032,0],
+    [2.999208922,2.209014212,0],
+    [7.497545867,3.162953546,1],
+    [9.00220326,3.339047188,1],
+    [7.444542326,0.476683375,1],
+    [10.12493903,3.234550982,1],
+    [6.642287351,3.319983761,1]]
 
+#BASE = None
+#if mode == 'gini' or 'entropy'
+#BASE = 10000
+#if mode == 'gain_ratio'
+#BASE = 0
+#classes = [0, 1]
 
+#value = impurity(dataset, [0,1], mode='gain_ratio')
+dataset = dataSet
+
+class_values = list(set(row[-1] for row in dataset))
+
+b_f_index, b_value, b_score, groups = None, None, 10000, None
+for f_index in range(len(dataset[0])-1):
+    
+    column_value = [example[f_index] for example in dataset]
+    split_values = continuous_attribute_split_position(column_value)
+
+    
+    for value in split_values:
+        groups = test_split(dataset, f_index, value)
+        score = impurity(groups, class_values, 'gini')
+        #if mode == 'gini' or 'entropy':
+        if score < b_score:
+            b_f_index, b_value, b_score, b_groups = f_index, value, score, groups
+        #if mode == 'gain_ratio':
+        #if split_impurity > b_split_impurity:
+        #    b_split_impurity = split_impurity
+        print('feature %d < %f score = %.3f / best: feature %d < %f score = %.3f' % \
+            (f_index, value, score, b_f_index, b_value, b_score))
 
 
 #featLabels = []
@@ -223,7 +287,16 @@ dataSet, labels = loadData(args.XLSX)
 #print(myTree)
 
 
-
+dataset = [[[2.771244718,1.784783929,0],
+    [1.728571309,1.169761413,0],
+    [3.678319846,2.81281357,0],
+    [3.961043357,2.61995032,0],
+    [2.999208922,2.209014212,0],
+    [7.497545867,3.162953546,1],
+    [9.00220326,3.339047188,1],
+    [7.444542326,0.476683375,1],
+    [10.12493903,3.234550982,1],
+    [6.642287351,3.319983761,1]]]
 
 
 
