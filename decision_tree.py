@@ -1,37 +1,12 @@
 import argparse
 from math import log
 
-from openpyxl import load_workbook, Workbook
+from utility import load_data
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--xlsx', help='need a xlsx file. \
                     e.g. --xlsx example.xlsx', dest='XLSX')
 args = parser.parse_args()
-
-
-
-def load_data(file):
-    wb = load_workbook(file)
-    ws = wb.active
-
-    dataSet = []
-    labels = None
-
-    for i,row in enumerate(ws.iter_rows()):
-        rowdata = [cell.value for cell in row]
-        if i > 1:
-            rowdata = rowdata[1:]
-            c = rowdata[0]
-            del rowdata[0]
-            rowdata.append(c)
-            dataSet.append(rowdata)
-        elif i == 1:
-            rowdata = rowdata[2:]
-            for i,r in enumerate(rowdata):
-                rowdata[i] = rowdata[i][1:-1]
-            labels = rowdata
-    
-    return dataSet, labels
 
 def impurity(groups, classes, mode='gini'):
     n_instance = float(sum([len(group) for group in groups]))
@@ -56,7 +31,7 @@ def impurity(groups, classes, mode='gini'):
                 if p != 0:
                     score_e -= p*log(p,2)
             elif mode == 'gain_ratio':
-                parent[class_val-1] += [row[-1] for row in group].count(class_val)
+                parent[int(class_val)-1] += [row[-1] for row in group].count(class_val)
 
         if mode == 'gini':
             gini += (size/n_instance) * (1 - score)
@@ -100,7 +75,6 @@ def _continuous_attribute_split_position(featList):
         s.append((featList[i]+featList[i+1])/2)
     s.append(featList[-1] + (featList[0]+featList[1])/2)
     return s
-#------------------
 
 def test_split(dataset, index, value):     
     left = []
@@ -179,7 +153,7 @@ def split(node, class_values, max_depth=3, min_size=1, depth=1, mode='gini'):
         split(node['right'], class_values, max_depth, min_size, depth+1, mode) 
 
 def main():
-    dataset, labels,  = load_data(args.XLSX)
+    dataset, labels  = load_data(args.XLSX)
 
     class_values = list(set(row[-1] for row in dataset))
     
@@ -190,4 +164,5 @@ def main():
     print(root)
 
 
-main()
+if __name__ == '__main__':
+    main()

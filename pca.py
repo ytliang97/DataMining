@@ -1,10 +1,11 @@
 import argparse
-#import math
 
 from openpyxl import load_workbook, Workbook
 import numpy as np
 from matplotlib import pyplot
 from sklearn.preprocessing import StandardScaler
+
+from utility import load_data
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--xlsx', help='need a xlsx file. \
@@ -15,9 +16,10 @@ def calculate_eigen_of_cov_mat(Attributes):
     """
     Need: import numpy as np
     Args:
-        Attributes is a 2 dimensional array, and assume it is M x N. It means 
-    we have M row observations, N column attributes. Attributes[k] is a 1 
-    dimensional vector, which show all observation values of kth attribute.
+        Attributes is a 2 dimensional list or numpy array, and assume it 
+        is M x N. It means we have M row observations, N column attributes.
+        Attribute[k] is a 1 dimensional list, whic show a row of record. 
+        First we need to turn the list to a numpy array.
 
     Step:
         1. calculate mean of every attributes' observation, so it will be N
@@ -31,6 +33,8 @@ def calculate_eigen_of_cov_mat(Attributes):
             value.
         5. return descending sorted eigen values and vectors 
     """
+    if isinstance(Attributes, list):
+        Attributes = np.array(Attributes)
     mean_vector = np.mean(Attributes, axis=0)
     norm_Attributes = Attributes - mean_vector
     std_data = StandardScaler().fit_transform(Attributes)
@@ -76,9 +80,9 @@ def choose_k_largest_eigen_transform(Attributes, vectors, mean_vector, k):
 
     
     z = np.dot(Attributes, W)
-    print('the results of dimension reduction')
-    for el in z:
-        print(el, end=', ')
+    #print('the results of dimension reduction')
+    #for el in z:
+    #    print(el)
 
     arr = np.array(z)
     n1 = arr.shape[0]
@@ -95,36 +99,23 @@ def choose_k_largest_eigen_transform(Attributes, vectors, mean_vector, k):
     pyplot.savefig('pca.png',dpi=400)
     pyplot.show()
     
-    return 
+    return z
 
 
-def loadData(file):
-    wb = load_workbook(file)
-    ws = wb.active
+def main():
 
-    Features = np.zeros(110)
-    F_Name = []
-    for k in range(2,22):
-        f = np.array([row[k].value for i, row 
-            in enumerate(ws.iter_rows()) if i > 1], dtype='float32')
-        name = [row[k].value for i, row 
-            in enumerate(ws.iter_rows()) if i == 1]
+    dataset, labels = load_data(args.XLSX)
 
-        Features = np.vstack((Features, f))
-        F_Name.append(name[0][1:-1])
-    Features = np.delete(Features, np.s_[0:1], axis=0)
+    features = [row[:-1] for row in dataset]
 
-    return Features.T
+    mean_vector, e_values, e_vectors, norm_Features = calculate_eigen_of_cov_mat(features)
+    scree_graph(e_values)
+    k = 20
+    print('eigen value 1:', e_values[0])
+    print('eigen vector 1:\n', e_vectors[0])
+    print('eigen value 2:', e_values[1])
+    print('eigen vector 2:\n', e_vectors[1])
+    choose_k_largest_eigen_transform(norm_Features, e_vectors, mean_vector, k)
 
-Features = loadData(args.XLSX)
-
-mean_vector, e_values, e_vectors, norm_Features = calculate_eigen_of_cov_mat(Features)
-scree_graph(e_values)
-k = 2
-print('eigen value 1:', e_values[0])
-print('eigen vector 1:\n', e_vectors[0])
-print('eigen value 2:', e_values[1])
-print('eigen vector 2:\n', e_vectors[1])
-choose_k_largest_eigen_transform(norm_Features, e_vectors, mean_vector, k)
-
-
+if __name__ == '__main__':
+    main()
